@@ -111,7 +111,7 @@ void MQTT::setupMqtt()
     {
         Serial.println("[MQTT] Connecting to MQTT broker...");
         uint retries = 0;
-        if (this->client->connect(this->clientId.c_str(), String(this->mqttRootTopic + "/" + this->clientId + "/availability").c_str(), 1, true, "offline"))
+        if (this->client->connect(this->clientId.c_str(), this->mqttUser, this->mqttPassword, String(this->mqttRootTopic + "/" + this->clientId + "/availability").c_str(), 1, true, "offline"))
         {
             Serial.println("[MQTT] connected!");
             this->client->publish(String(this->mqttRootTopic + "/" + this->clientId + "/availability").c_str(), "online", true);

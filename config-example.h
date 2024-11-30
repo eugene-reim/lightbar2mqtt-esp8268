@@ -31,9 +31,11 @@
 #define MQTT_PORT 1883
 
 // The user to use to connect to the MQTT broker.
+// Set this to NULL if no user is required.
 #define MQTT_USER "<Your User>"
 
 // The password to use to connect to the MQTT broker.
+// Set this to NULL if no password is required.
 #define MQTT_PASSWORD "<Your Password>"
 
 // The root topic used for communicating with this controller.
