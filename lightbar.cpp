@@ -1,30 +1,41 @@
 #include "lightbar.h"
 
-Lightbar::Lightbar(uint32_t incoming_serial, uint32_t outgoing_serial, uint8_t ce, uint8_t csn)
+Lightbar::Lightbar(Radio *radio, uint32_t serial, const char *name)
 {
-    this->radio = new Radio(ce, csn);
-    this->radio->setOutgoingSerial(outgoing_serial);
-    this->incoming_serial = incoming_serial;
+    this->radio = radio;
+    this->serial = serial;
+    this->name = name;
+
+    this->serialString = "0x" + String(this->serial, HEX);
 }
 
 Lightbar::~Lightbar()
 {
-    delete this->radio;
 }
 
-void Lightbar::setup()
+uint32_t Lightbar::getSerial()
 {
-    this->radio->setup();
+    return this->serial;
+}
+
+const String Lightbar::getSerialString()
+{
+    return this->serialString;
+}
+
+const char *Lightbar::getName()
+{
+    return this->name;
 }
 
 void Lightbar::sendRawCommand(Command command, byte options)
 {
-    this->radio->sendCommand(command, options);
+    this->radio->sendCommand(serial, command, options);
 }
 
 void Lightbar::sendRawCommand(Command command)
 {
-    this->radio->sendCommand(command);
+    this->radio->sendCommand(serial, command);
 }
 
 void Lightbar::onOff()
@@ -93,14 +104,4 @@ void Lightbar::setBrightness(uint8_t value)
     // for details.
     this->sendRawCommand(Lightbar::Command::DIMMER, 0x0 - 16);
     this->sendRawCommand(Lightbar::Command::BRIGHTER, (byte)value);
-}
-
-void Lightbar::loop()
-{
-    this->radio->loop();
-}
-
-bool Lightbar::registerCommandListener(std::function<void(uint32_t, byte, byte)> callback)
-{
-    return this->radio->addIncomingSerial(this->incoming_serial, callback);
 }

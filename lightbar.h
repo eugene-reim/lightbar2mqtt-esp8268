@@ -1,14 +1,16 @@
 #ifndef LIGHTBAR_H
 #define LIGHTBAR_H
 
-#include "radio.h";
+#include "radio.h"
 
 class Lightbar
 {
 public:
-    Lightbar(uint32_t incoming_serial, uint32_t outgoing_serial, uint8_t ce, uint8_t csn);
+    Lightbar(Radio *radio, uint32_t serial, const char *name);
     ~Lightbar();
-    void setup();
+    uint32_t getSerial();
+    const String getSerialString();
+    const char *getName();
 
     enum Command
     {
@@ -34,16 +36,12 @@ public:
     void setMiredTemperature(uint mireds);
     void setBrightness(uint8_t value);
 
-    void loop();
-
-    bool registerCommandListener(std::function<void(uint32_t, byte, byte)> callback);
-
-    static void callback(uint32_t serial, byte command, byte options);
-
 private:
     Radio *radio;
     bool onState = false;
-    uint32_t incoming_serial;
+    uint32_t serial;
+    String serialString;
+    const char *name;
 };
 
 #endif

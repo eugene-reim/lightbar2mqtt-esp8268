@@ -21,27 +21,52 @@ Radio::~Radio()
     this->radio.powerDown();
 }
 
-void Radio::setOutgoingSerial(uint32_t serial)
+bool Radio::addRemote(Remote *remote)
 {
-    this->outgoing_serial = serial;
-}
-
-bool Radio::addIncomingSerial(uint32_t serial, std::function<void(uint32_t, byte, byte)> callback)
-{
-    if (this->num_remotes >= MAX_REMOTES)
+    if (this->num_remotes >= constants::MAX_REMOTES)
+    {
+        Serial.println("[Radio] Could not add remote, because too many remotes are saved!");
+        Serial.println("[Radio] Please check if you actually want to save more than " + String(constants::MAX_REMOTES, DEC) + " remotes.");
+        Serial.println("[Radio] If you do, increase MAX_REMOTES in constants.h and recompile.");
         return false;
-    this->remotes[this->num_remotes].serial = serial;
-    this->remotes[this->num_remotes].last_received_package_id = 0;
-    this->remotes[this->num_remotes].callback = callback;
+    }
+    if (this->num_package_ids >= constants::MAX_SERIALS)
+    {
+        Serial.println("[Radio] Could not add remote, because too many serials are saved!");
+        Serial.println("[Radio] Please check if you actually want to save more than " + String(constants::MAX_SERIALS, DEC) + " serials.");
+        Serial.println("[Radio] If you do, increase MAX_SERIALS in constants.h and recompile.");
+        return false;
+    }
+    this->remotes[this->num_remotes] = remote;
     this->num_remotes++;
+    this->package_ids[this->num_package_ids].serial = remote->getSerial();
+    this->package_ids[this->num_package_ids].package_id = 0;
+    this->num_package_ids++;
+    Serial.print("[Radio] Remote ");
+    Serial.print(remote->getSerialString());
+    Serial.println(" added!");
+    return true;
 }
 
-bool Radio::removeIncomingSerial(uint32_t serial)
+bool Radio::removeRemote(Remote *remote)
 {
     for (int i = 0; i < this->num_remotes; i++)
     {
-        if (this->remotes[i].serial == serial)
+        if (this->remotes[i] == remote)
         {
+            for (int j = 0; j < this->num_package_ids; j++)
+            {
+                if (this->package_ids[j].serial == remote->getSerial())
+                {
+                    for (int k = j; k < this->num_package_ids - 1; k++)
+                    {
+                        this->package_ids[k] = this->package_ids[k + 1];
+                    }
+                    this->num_package_ids--;
+                    break;
+                }
+            }
+
             for (int j = i; j < this->num_remotes - 1; j++)
             {
                 this->remotes[j] = this->remotes[j + 1];
@@ -53,15 +78,39 @@ bool Radio::removeIncomingSerial(uint32_t serial)
     return false;
 }
 
-void Radio::sendCommand(byte command, byte options)
+void Radio::sendCommand(uint32_t serial, byte command, byte options)
 {
+    PackageIdForSerial *package_id = nullptr;
+    for (int i = 0; i < this->num_package_ids; i++)
+    {
+        if (this->package_ids[i].serial == serial)
+        {
+            package_id = &this->package_ids[i];
+            break;
+        }
+    }
+    if (package_id == nullptr)
+    {
+        if (this->num_package_ids >= constants::MAX_SERIALS)
+        {
+            Serial.println("[Radio] Could not send command, because too many serials are saved!");
+            Serial.println("[Radio] Please check if you actually want to save more than " + String(constants::MAX_SERIALS, DEC) + " serials.");
+            Serial.println("[Radio] If you do, increase MAX_SERIALS in constants.h and recompile.");
+            return;
+        }
+        package_id = &this->package_ids[this->num_package_ids];
+        package_id->serial = serial;
+        package_id->package_id = 0;
+        this->num_package_ids++;
+    }
+
     byte data[17] = {0};
     memcpy(data, Radio::preamble, sizeof(Radio::preamble));
-    data[8] = (this->outgoing_serial & 0xFF0000) >> 16;
-    data[9] = (this->outgoing_serial & 0x00FF00) >> 8;
-    data[10] = this->outgoing_serial & 0x0000FF;
+    data[8] = (serial & 0xFF0000) >> 16;
+    data[9] = (serial & 0x00FF00) >> 8;
+    data[10] = serial & 0x0000FF;
     data[11] = 0xFF;
-    data[12] = this->last_sent_package_id;
+    data[12] = ++package_id->package_id;
     data[13] = command;
     data[14] = options;
 
@@ -70,8 +119,6 @@ void Radio::sendCommand(byte command, byte options)
     uint16_t checksum = this->crc.calc();
     data[15] = (checksum & 0xFF00) >> 8;
     data[16] = checksum & 0x00FF;
-
-    this->last_sent_package_id += 1;
 
     Serial.print("[Radio] Sending command: 0x");
     for (int i = 0; i < 17; i++)
@@ -89,9 +136,9 @@ void Radio::sendCommand(byte command, byte options)
     this->radio.startListening();
 }
 
-void Radio::sendCommand(byte command)
+void Radio::sendCommand(uint32_t serial, byte command)
 {
-    return this->sendCommand(command, 0x0);
+    return this->sendCommand(serial, command, 0x0);
 }
 
 void Radio::setup()
@@ -135,10 +182,12 @@ void Radio::loop()
         delay(1000);
     }
 
-    // Only continue if there is a package available.
-    if (!this->radio.available())
-        return;
+    if (this->radio.available())
+        this->handlePackage();
+}
 
+void Radio::handlePackage()
+{
     // Read raw data, append a 5 and shift it. See
     // https://github.com/lamperez/xiaomi-lightbar-nrf24?tab=readme-ov-file#baseband-packet-format
     // on why that is necessary.
@@ -169,33 +218,51 @@ void Radio::loop()
     }
 
     // Check if package is coming from a observed remote.
-    bool found = false;
+    Remote *remote = nullptr;
     uint32_t serial = data[8] << 16 | data[9] << 8 | data[10];
     for (int i = 0; i < this->num_remotes; i++)
     {
-        Remote remote = this->remotes[i];
-        if (serial != remote.serial)
-            continue;
 
-        found = true;
-
-        // Make sure the same package was not handled before.
-        uint8_t package_id = data[12];
-        if (package_id <= remote.last_received_package_id && package_id > remote.last_received_package_id - 64)
+        if (serial == this->remotes[i]->getSerial())
         {
-            Serial.println("[Radio] Ignoring package with too low package number!");
-            continue;
+            remote = this->remotes[i];
+            break;
         }
-        remote.last_received_package_id = package_id;
-
-        Serial.println("[Radio] Package received!");
-        remote.callback(remote.serial, data[13], data[14]);
     }
 
-    if (!found)
+    if (remote == nullptr)
     {
-        Serial.print("[Radio] Ignoring package with not matching serial: 0x");
+        Serial.print("[Radio] Ignoring package with unknown serial: 0x");
         Serial.print(serial, HEX);
         Serial.println("");
+        return;
     }
+
+    // Make sure the same package was not handled before.
+    uint8_t package_id = data[12];
+    PackageIdForSerial *package_id_for_serial = nullptr;
+    for (int i = 0; i < this->num_package_ids; i++)
+    {
+        if (this->package_ids[i].serial == serial)
+        {
+            package_id_for_serial = &this->package_ids[i];
+            break;
+        }
+    }
+    if (package_id_for_serial == nullptr)
+    {
+        Serial.print("[Radio] Could not find latest package id for serial 0x");
+        Serial.print(serial, HEX);
+        Serial.println("!");
+        return;
+    }
+    if (package_id <= package_id_for_serial->serial && package_id > package_id_for_serial->serial - 64)
+    {
+        Serial.println("[Radio] Ignoring package with too low package number!");
+        return;
+    }
+    package_id_for_serial->package_id = package_id;
+
+    Serial.println("[Radio] Package received!");
+    remote->callback(data[13], data[14]);
 }

@@ -1,12 +1,10 @@
-#include "mqtt.h"
-
 #include <Arduino_JSON.h>
 #include <esp_mac.h>
 
-MQTT::MQTT(Lightbar *lightbar, const char *wifiSsid, const char *wifiPassword, const char *mqttServer, int mqttPort, const char *mqttUser, const char *mqttPassword, const char *mqttRootTopic, bool homeAssistantAutoDiscovery, const char *homeAssistantAutoDiscoveryPrefix, const char *homeAssistantDeviceName)
+#include "mqtt.h"
+
+MQTT::MQTT(WiFiClient *wifiClient, const char *mqttServer, int mqttPort, const char *mqttUser, const char *mqttPassword, const char *mqttRootTopic, bool homeAssistantAutoDiscovery, const char *homeAssistantAutoDiscoveryPrefix)
 {
-    this->wifiSsid = wifiSsid;
-    this->wifiPassword = wifiPassword;
     this->mqttServer = mqttServer;
     this->mqttPort = mqttPort;
     this->mqttUser = mqttUser;
@@ -14,12 +12,10 @@ MQTT::MQTT(Lightbar *lightbar, const char *wifiSsid, const char *wifiPassword, c
     this->mqttRootTopic = String(mqttRootTopic);
     this->homeAssistantDiscovery = homeAssistantAutoDiscovery;
     this->homeAssistantDiscoveryPrefix = String(homeAssistantAutoDiscoveryPrefix);
-    this->homeAssistantDeviceName = String(homeAssistantDeviceName);
 
-    this->wifiClient = new WiFiClient();
-    this->client = new PubSubClient(*this->wifiClient);
-    this->lightbar = lightbar;
-    this->lightbar->registerCommandListener(std::bind(&MQTT::sendAction, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->remoteCommandHandler = std::bind(&MQTT::sendAction, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+
+    this->client = new PubSubClient(*wifiClient);
 
     String mac = "";
     unsigned char mac_base[6] = {0};
@@ -30,12 +26,22 @@ MQTT::MQTT(Lightbar *lightbar, const char *wifiSsid, const char *wifiPassword, c
         mac = buffer;
     }
     this->clientId = "l2m_" + mac;
+    this->combinedRootTopic = this->mqttRootTopic + "/" + this->clientId;
 }
 
 MQTT::~MQTT()
 {
     delete this->client;
-    delete this->wifiClient;
+}
+
+const String MQTT::getCombinedRootTopic()
+{
+    return this->combinedRootTopic;
+}
+
+const String MQTT::getClientId()
+{
+    return this->clientId;
 }
 
 void MQTT::onMessage(char *topic, byte *payload, unsigned int length)
@@ -49,93 +55,40 @@ void MQTT::onMessage(char *topic, byte *payload, unsigned int length)
     }
     Serial.println();
 
-    if (!strcmp(topic, String(this->mqttRootTopic + "/" + this->clientId + "/pair").c_str()))
-    {
-        this->lightbar->pair();
-        return;
-    }
-
     JSONVar command = JSON.parse(String(payload, length));
 
-    if (JSON.typeof(command) != "object")
-        return;
-
-    if (command.hasOwnProperty("state"))
+    Lightbar *lightbar = nullptr;
+    for (int i = 0; i < this->lightbarCount; i++)
     {
-        const char *state = command["state"];
-        this->lightbar->setOnOff(strcmp(state, "ON"));
-    }
-
-    if (command.hasOwnProperty("brightness"))
-    {
-        this->lightbar->setBrightness((uint8_t)command["brightness"]);
-    }
-
-    if (command.hasOwnProperty("color_temp"))
-    {
-        this->lightbar->setMiredTemperature((uint)command["color_temp"]);
-    }
-}
-
-void MQTT::setupWifi()
-{
-    Serial.print("[WiFi] Connecting to network \"");
-    Serial.print(this->wifiSsid);
-    Serial.print("\"...");
-
-    WiFi.begin(this->wifiSsid, this->wifiPassword);
-    WiFi.setHostname(this->clientId.c_str());
-
-    uint retries = 0;
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(1000);
-        Serial.print(".");
-        retries++;
-        if (retries > 60)
-            ESP.restart();
-    }
-    Serial.println();
-    Serial.println("[WiFi] connected!");
-
-    Serial.print("[WiFi] IP address: ");
-    Serial.println(WiFi.localIP());
-}
-
-void MQTT::setupMqtt()
-{
-    this->client->setServer(this->mqttServer, this->mqttPort);
-    this->client->setCallback(std::bind(&MQTT::onMessage, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-
-    while (!this->client->connected())
-    {
-        Serial.println("[MQTT] Connecting to MQTT broker...");
-        uint retries = 0;
-        if (this->client->connect(this->clientId.c_str(), this->mqttUser, this->mqttPassword, String(this->mqttRootTopic + "/" + this->clientId + "/availability").c_str(), 1, true, "offline"))
+        lightbar = this->lightbars[i];
+        if (!strcmp(topic, String(this->getCombinedRootTopic() + "/" + lightbar->getSerialString() + "/pair").c_str()))
         {
-            Serial.println("[MQTT] connected!");
-            this->client->publish(String(this->mqttRootTopic + "/" + this->clientId + "/availability").c_str(), "online", true);
-            this->client->subscribe(String(this->mqttRootTopic + "/" + this->clientId + "/lightbar/command").c_str());
-            this->client->subscribe(String(this->mqttRootTopic + "/" + this->clientId + "/pair").c_str());
+            lightbar->pair();
+            return;
         }
-        else
+
+        if (strcmp(topic, String(this->getCombinedRootTopic() + "/" + lightbar->getSerialString() + "/command").c_str()))
+            continue;
+
+        if (JSON.typeof(command) != "object")
+            continue;
+
+        if (command.hasOwnProperty("state"))
         {
-            Serial.print("[MQTT] Connection failed! rc=");
-            Serial.print(this->client->state());
-            Serial.println(" try again in 1 second");
-            while (WiFi.status() != WL_CONNECTED)
-            {
-                this->setupWifi();
-            }
-            delay(1000);
-            retries++;
-            if (retries > 60)
-                ESP.restart();
+            const char *state = command["state"];
+            lightbar->setOnOff(strcmp(state, "ON"));
+        }
+
+        if (command.hasOwnProperty("brightness"))
+        {
+            lightbar->setBrightness((uint8_t)command["brightness"]);
+        }
+
+        if (command.hasOwnProperty("color_temp"))
+        {
+            lightbar->setMiredTemperature((uint)command["color_temp"]);
         }
     }
-
-    if (homeAssistantDiscovery)
-        this->sendHomeAssistantDiscoveryMessages();
 }
 
 void MQTT::setup()
@@ -143,33 +96,156 @@ void MQTT::setup()
     Serial.print("[MQTT] Device ID: ");
     Serial.println(this->clientId);
     Serial.print("[MQTT] Root Topic: ");
-    Serial.println(this->mqttRootTopic + "/" + this->clientId);
+    Serial.println(this->getCombinedRootTopic());
 
-    this->setupWifi();
-    this->setupMqtt();
+    this->client->setServer(this->mqttServer, this->mqttPort);
+    this->client->setCallback(std::bind(&MQTT::onMessage, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    while (!this->client->connected())
+    {
+        Serial.println("[MQTT] Connecting to MQTT broker...");
+        uint retries = 0;
+        if (this->client->connect(this->clientId.c_str(), this->mqttUser, this->mqttPassword, String(this->getCombinedRootTopic() + "/availability").c_str(), 1, true, "offline"))
+        {
+            Serial.println("[MQTT] connected!");
+            this->client->publish(String(this->getCombinedRootTopic() + "/availability").c_str(), "online", true);
+            this->client->subscribe(String(this->getCombinedRootTopic() + "/+/command").c_str());
+            this->client->subscribe(String(this->getCombinedRootTopic() + "/+/pair").c_str());
+        }
+        else
+        {
+            Serial.print("[MQTT] Connection failed! rc=");
+            Serial.print(this->client->state());
+            Serial.println(" try again in 1 second");
+            delay(1000);
+            retries++;
+            if (retries > 60)
+                ESP.restart();
+        }
+    }
+
+    this->sendAllHomeAssistantDiscoveryMessages();
 }
 
-void MQTT::sendHomeAssistantDiscoveryMessages()
+bool MQTT::addLightbar(Lightbar *lightbar)
 {
+    if (this->lightbarCount >= constants::MAX_LIGHTBARS)
+    {
+        Serial.println("[MQTT] Could not add light bar, because too many light bars are saved!");
+        Serial.println("[MQTT] Please check if you actually want to save more than " + String(constants::MAX_LIGHTBARS, DEC) + " light bars.");
+        Serial.println("[MQTT] If you do, increase MAX_LIGHTBARS in constants.h and recompile.");
+        return false;
+    }
+    this->lightbars[this->lightbarCount] = lightbar;
+    this->lightbarCount++;
+    this->sendHomeAssistantLightbarDiscoveryMessages(lightbar);
+    return true;
+}
+
+bool MQTT::removeLightbar(Lightbar *lightbar)
+{
+    for (int i = 0; i < this->lightbarCount; i++)
+    {
+        if (this->lightbars[i] == lightbar)
+        {
+            for (int j = i; j < this->lightbarCount - 1; j++)
+            {
+                this->lightbars[j] = this->lightbars[j + 1];
+            }
+            this->lightbarCount--;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MQTT::addRemote(Remote *remote)
+{
+    if (this->remoteCount >= constants::MAX_REMOTES)
+    {
+        Serial.println("[MQTT] Could not add remote, because too many remotes are saved!");
+        Serial.println("[MQTT] Please check if you actually want to save more than " + String(constants::MAX_REMOTES, DEC) + " remotes.");
+        Serial.println("[MQTT] If you do, increase MAX_REMOTES in constants.h and recompile.");
+        return false;
+    }
+    this->remotes[this->remoteCount] = remote;
+    this->remoteCount++;
+    remote->registerCommandListener(this->remoteCommandHandler);
+    this->sendHomeAssistantRemoteDiscoveryMessages(remote);
+    return true;
+}
+
+bool MQTT::removeRemote(Remote *remote)
+{
+    for (int i = 0; i < this->remoteCount; i++)
+    {
+        if (this->remotes[i] == remote)
+        {
+            this->remotes[i]->registerCommandListener(this->remoteCommandHandler);
+            for (int j = i; j < this->remoteCount - 1; j++)
+            {
+                this->remotes[j] = this->remotes[j + 1];
+            }
+            this->remoteCount--;
+            return true;
+        }
+    }
+    return false;
+}
+
+void MQTT::sendAllHomeAssistantDiscoveryMessages()
+{
+    if (!this->homeAssistantDiscovery)
+        return;
+    for (int i = 0; i < this->lightbarCount; i++)
+    {
+        this->sendHomeAssistantLightbarDiscoveryMessages(this->lightbars[i]);
+    }
+    for (int i = 0; i < this->remoteCount; i++)
+    {
+        this->sendHomeAssistantRemoteDiscoveryMessages(this->remotes[i]);
+    }
+}
+
+void MQTT::sendHomeAssistantLightbarDiscoveryMessages(Lightbar *lightbar)
+{
+    if (!this->homeAssistantDiscovery)
+        return;
+
+    Serial.print("[MQTT] Sending lightbar discovery messages for ");
+    Serial.println(lightbar->getSerialString());
+
+    const String topicClient = this->clientId + "_" + lightbar->getSerialString();
     const String baseConfig = R"json(
     "schema": "json",
     "o": {
         "name": "lightbar2mqtt",
-        "sw_version": "0.1",
+        "sw_version": ")json" +
+                              constants::VERSION +
+                              R"json(",
         "support_url": "https://github.com/ebinf/lightbar2mqtt"
     },
-    "~": ")json" + this->mqttRootTopic +
+    "~": ")json" + this->getCombinedRootTopic() +
                               "/" +
-                              this->clientId +
+                              lightbar->getSerialString() +
                               R"json(",
-    "availability_topic": "~/availability",
-    "dev": {
-        "ids": ")json" + this->clientId +
+    "availability_topic": ")json" +
+                              this->getCombinedRootTopic() + R"json(/availability",
+    "dev":
+    {
+        "ids" : ")json" + topicClient +
                               R"json(",
-        "name": ")json" + homeAssistantDeviceName +
+        "name": ")json" +
+                              lightbar->getName() +
                               R"json(",
-        "mdl": "MJGJD01YL",
-        "mf": "Xiaomi"
+        "mdl": "Mi Computer Monitor Light Bar (MJGJD01YL)",
+        "mf": "Xiaomi",
+        "sw": "lightbar2mqtt )json" +
+                              constants::VERSION +
+                              R"json(",
+        "sn": ")json" +
+                              lightbar->getSerialString() +
+                              R"json("
     },)json";
 
     String rendevous_str = "{" +
@@ -181,30 +257,16 @@ void MQTT::sendHomeAssistantDiscoveryMessages()
     "brightness": true,
     "brightness_scale": 15,
     "name": "Light bar",
-    "cmd_t": "~/lightbar/command",
-    "uniq_id": ")json" + this->clientId +
+    "cmd_t": "~/command",
+    "uniq_id": ")json" + topicClient +
                            R"json(_lightbar",
     "max_mireds": 370,
     "min_mireds":153,
-    "p": "light"
+    "p": "light",
+    "icon": "mdi:wall-sconce-flat"
     )json" + "}";
 
-    this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/light/" + this->clientId + "/lightbar/config").c_str(), rendevous_str.length(), true);
-    this->client->print(rendevous_str);
-    this->client->endPublish();
-
-    rendevous_str = "{" +
-                    baseConfig +
-                    R"json(
-    "name": "Remote",
-    "state_topic": "~/remote/state",
-    "uniq_id": ")json" +
-                    this->clientId + R"json(_remote",
-    "value_template": "{{ value }}",
-    "p": "sensor"
-    )json" + "}";
-
-    this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/sensor/" + this->clientId + "/remote/config").c_str(), rendevous_str.length(), true);
+    this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/light/" + topicClient + "/lightbar/config").c_str(), rendevous_str.length(), true);
     this->client->print(rendevous_str);
     this->client->endPublish();
 
@@ -214,10 +276,66 @@ void MQTT::sendHomeAssistantDiscoveryMessages()
     "name": "Pair",
     "cmd_t": "~/pair",
     "uniq_id": ")json" +
-                    this->clientId + R"json(_pair",
+                    topicClient + R"json(_pair",
     "p": "button"
     )json" + "}";
-    this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/button/" + this->clientId + "/pair/config").c_str(), rendevous_str.length(), true);
+    this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/button/" + topicClient + "/pair/config").c_str(), rendevous_str.length(), true);
+    this->client->print(rendevous_str);
+    this->client->endPublish();
+}
+
+void MQTT::sendHomeAssistantRemoteDiscoveryMessages(Remote *remote)
+{
+    if (!this->homeAssistantDiscovery)
+        return;
+
+    Serial.print("[MQTT] Sending remote discovery messages for ");
+    Serial.println(remote->getSerialString());
+
+    const String topicClient = this->clientId + "_" + remote->getSerialString();
+    const String baseConfig = R"json(
+    "schema": "json",
+    "o": {
+        "name": "lightbar2mqtt",
+        "sw_version": ")json" +
+                              constants::VERSION +
+                              R"json(",
+        "support_url": "https://github.com/ebinf/lightbar2mqtt"
+    },
+    "~": ")json" + this->getCombinedRootTopic() +
+                              "/" +
+                              remote->getSerialString() +
+                              R"json(",
+    "availability_topic": ")json" +
+                              this->getCombinedRootTopic() + R"json(/availability",
+    "dev": {
+        "ids": ")json" + topicClient +
+                              R"json(",
+        "name": ")json" + remote->getName() +
+                              R"json(",
+        "mdl": "Mi Computer Monitor Light Bar Remote Control (MJGJD01YL)",
+        "mf": "Xiaomi",
+        "sw": "lightbar2mqtt )json" +
+                              constants::VERSION +
+                              R"json(",
+        "sn": ")json" + remote->getSerialString() +
+                              R"json("
+    },)json";
+
+    String rendevous_str = "{" +
+                           baseConfig +
+                           R"json(
+    "name": "Remote",
+    "state_topic": "~/state",
+    "uniq_id": ")json" +
+                           topicClient + R"json(_remote",
+    "value_template": "{{ value }}",
+    "enabled_by_default": true,
+    "entity_category": "diagnostic",
+    "icon": "mdi:gesture-double-tap"
+    )json" + "}";
+
+    this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/sensor/" + topicClient + "/remote/config").c_str(), rendevous_str.length(), true);
     this->client->print(rendevous_str);
     this->client->endPublish();
 
@@ -241,11 +359,11 @@ void MQTT::sendHomeAssistantDiscoveryMessages()
     "subtype": ")json" + cmd +
                         R"json(",
     "type": "action",
-    "topic": "~/remote/state",
+    "topic": "~/state",
     "p": "device_automation"
     )json" + "}";
 
-        this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/device_automation/" + this->clientId + "/action_" + cmd + "/config").c_str(), rendevous_str.length(), true);
+        this->client->beginPublish(String(homeAssistantDiscoveryPrefix + "/device_automation/" + topicClient + "/action_" + cmd + "/config").c_str(), rendevous_str.length(), true);
         this->client->print(rendevous_str);
         this->client->endPublish();
     }
@@ -256,14 +374,14 @@ void MQTT::loop()
     if (!this->client->connected())
     {
         Serial.println("[MQTT] connection lost!");
-        this->setupMqtt();
+        this->setup();
     }
     this->client->loop();
 }
 
-void MQTT::sendAction(uint32_t serial, byte command, byte options)
+void MQTT::sendAction(Remote *remote, byte command, byte options)
 {
-    const char *action;
+    String action;
     switch ((uint8_t)command)
     {
     case Lightbar::Command::ON_OFF:
@@ -293,5 +411,13 @@ void MQTT::sendAction(uint32_t serial, byte command, byte options)
     default:
         return;
     }
-    this->client->publish(String(this->mqttRootTopic + "/" + this->clientId + "/remote/state").c_str(), action);
+
+    String topic = String(this->getCombinedRootTopic() + "/" + remote->getSerialString() + "/state");
+    Serial.print("[MQTT] Sending message (");
+    Serial.print(topic);
+    Serial.print("): ");
+    Serial.println(action);
+    this->client->publish(topic.c_str(), action.c_str());
+    delay(200);
+    this->client->publish(topic.c_str(), NULL);
 }

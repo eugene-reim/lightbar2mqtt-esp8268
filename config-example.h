@@ -1,3 +1,5 @@
+#include "constants.h"
+
 /* -- nRF24 --------------------------------------------------------------------------------------------------- */
 // The pin number to which the nRF24's Chip Enable (CE) pin is connected.
 #define RADIO_PIN_CE 4
@@ -5,16 +7,29 @@
 // The pin number to which the nRF24's Chip Select Null (CSN) pin is connected.
 #define RADIO_PIN_CSN 5
 
-/* -- Light Bar ----------------------------------------------------------------------------------------------- */
-// The serial of the remote to listen to.
+/* -- Light Bars ---------------------------------------------------------------------------------------------- */
+// All light bars that should be controlled by this controller. Each light bar must have a unique serial.
+// Each entry consists of the serial and the name of the light bar. By default, up to 10 light bars can be added.
+//
+// If the serial is set to the same value as one remote's, the original remote will still control the light bar
+// directly. To separate the light bar from the original remote, set this to a different value, e.g. 0xABCDEF.
+//
+// The name will be used in Home Assistant.
+constexpr SerialWithName LIGHTBARS[] = {
+    {0xABCDEF, "Light Bar 1"},
+};
+
+/* -- Remotes ------------------------------------------------------------------------------------------------- */
+// All remotes that this controller should listen to. Each remote must have a unique serial.
+// Each entry consists of the serial and the name of the remote. By default, up to 10 remotes can be added.
+//
 // If you don't know the serial of your remote, just set this to any value and flash your controller. Once
 // the controller is running, the serial of your remote will be printed to the console.
-#define INCOMING_SERIAL 0x123456
-
-// The serial, the controller should emulate.
-// If set to the same value as INCOMING_SERIAL, the original remote will still control the ligtbar directly.
-// To separate the light bar from the original remote, set this to a different value, e.g. 0xABCDEF.
-#define OUTGOING_SERIAL 0xABCDEF
+//
+// The name will be used in Home Assistant.
+constexpr SerialWithName REMOTES[] = {
+    {0x123456, "Remote 1"},
+};
 
 /* -- WiFi ---------------------------------------------------------------------------------------------------- */
 // The SSID of the WiFi network to connect to.
