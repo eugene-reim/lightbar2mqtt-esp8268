@@ -101,28 +101,26 @@ void MQTT::setup()
     this->client->setServer(this->mqttServer, this->mqttPort);
     this->client->setCallback(std::bind(&MQTT::onMessage, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
+    uint retries = 0;
+    Serial.println("[MQTT] Connecting to MQTT broker...");
     while (!this->client->connected())
     {
-        Serial.println("[MQTT] Connecting to MQTT broker...");
-        uint retries = 0;
-        if (this->client->connect(this->clientId.c_str(), this->mqttUser, this->mqttPassword, String(this->getCombinedRootTopic() + "/availability").c_str(), 1, true, "offline"))
-        {
-            Serial.println("[MQTT] connected!");
-            this->client->publish(String(this->getCombinedRootTopic() + "/availability").c_str(), "online", true);
-            this->client->subscribe(String(this->getCombinedRootTopic() + "/+/command").c_str());
-            this->client->subscribe(String(this->getCombinedRootTopic() + "/+/pair").c_str());
-        }
-        else
+        if (!this->client->connect(this->clientId.c_str(), this->mqttUser, this->mqttPassword, String(this->getCombinedRootTopic() + "/availability").c_str(), 1, true, "offline"))
         {
             Serial.print("[MQTT] Connection failed! rc=");
             Serial.print(this->client->state());
-            Serial.println(" try again in 1 second");
+            Serial.println(" trying again in 1 second.");
             delay(1000);
             retries++;
             if (retries > 60)
                 ESP.restart();
         }
     }
+
+    Serial.println("[MQTT] connected!");
+    this->client->publish(String(this->getCombinedRootTopic() + "/availability").c_str(), "online", true);
+    this->client->subscribe(String(this->getCombinedRootTopic() + "/+/command").c_str());
+    this->client->subscribe(String(this->getCombinedRootTopic() + "/+/pair").c_str());
 
     this->sendAllHomeAssistantDiscoveryMessages();
 }
