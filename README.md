@@ -1,6 +1,6 @@
 # lightbar2mqtt
 
-Control your [Xiaomi Mi Computer Monitor Light Bar](https://www.mi.com/global/product/mi-computer-monitor-light-bar/) with MQTT and add it to Home Assistant! All you need is a ESP32, a nRF24 module and a light bar of course.
+Control your [Xiaomi Mi Computer Monitor Light Bar](https://www.mi.com/global/product/mi-computer-monitor-light-bar/) with MQTT and add it to Home Assistant! All you need is a ESP8266, a nRF24 module and a light bar of course.
 
 ## Acknowledgements
 
@@ -24,24 +24,25 @@ This project would not have been possible without the work of these amazing peop
 ## Requirements
 
 - a Xiaomi Mi Computer Monitor Light Bar, Model MJGJD**01**YL (without BLE/WiFi). The MJGJD**02**YL will not work!
-- an ESP32
+- an ESP8266
 - a nRF24 module (tested with nRF24L01)
 
 ## Installation
 
 ### 1. Hardware
 
-Connect the nRF24 module to the ESP32 as follows. At least these pins work for my combination of ESP32 and nRF24 module. You can change the CE & CSN pins in the `config.h` file if you need to. The SPI pins (SCK, MOSI, MISO) might be different on your ESP32 – check the pinout of your ESP32!
+Connect the nRF24 module to the ESP8266 as follows. At least these pins work for my combination of ESP32 and nRF24 module. You can change the CE & CSN pins in the `config.h` file if you need to. The SPI pins (SCK, MOSI, MISO) might be different on your ESP32 – check the pinout of your ESP32!
+<img width="1024" height="576" alt="image" src="https://github.com/user-attachments/assets/1ab39c34-8cb3-4fac-b7aa-c1a0c986e1b5" />
 
-| nRF24 |  ESP32 |
+| nRF24 |ESP8266 |
 | :---- | -----: |
 | VCC   |    3V3 |
 | GND   |    GND |
-| CE    |  Pin 4 |
-| CSN   |  Pin 5 |
-| SCK   | Pin 18 |
-| MOSI  | Pin 23 |
-| MISO  | Pin 19 |
+| CE    |     D2 |
+| CSN   |     D1 |
+| SCK   |     D5 |
+| MOSI  |     D7 |
+| MISO  |     D6 |
 
 ### 2. Software
 
