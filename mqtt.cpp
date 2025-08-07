@@ -1,5 +1,4 @@
 #include <Arduino_JSON.h>
-#include <esp_mac.h>
 
 #include "mqtt.h"
 
@@ -17,15 +16,11 @@ MQTT::MQTT(WiFiClient *wifiClient, const char *mqttServer, int mqttPort, const c
 
     this->client = new PubSubClient(*wifiClient);
 
-    String mac = "";
-    unsigned char mac_base[6] = {0};
-    if (esp_efuse_mac_get_default(mac_base) == ESP_OK)
-    {
-        char buffer[13]; // 6*2 characters for hex + 5 characters for colons + 1 character for null terminator
-        sprintf(buffer, "%02X%02X%02X%02X%02X%02X", mac_base[0], mac_base[1], mac_base[2], mac_base[3], mac_base[4], mac_base[5]);
-        mac = buffer;
-    }
-    this->clientId = "l2m_" + mac;
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char buffer[13]; // 6*2 characters for hex + 1 character for null terminator
+    sprintf(buffer, "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    this->clientId = "l2m_" + String(buffer);
     this->combinedRootTopic = this->mqttRootTopic + "/" + this->clientId;
 }
 
@@ -55,7 +50,7 @@ void MQTT::onMessage(char *topic, byte *payload, unsigned int length)
     }
     Serial.println();
 
-    JSONVar command = JSON.parse(String(payload, length));
+    JSONVar command = JSON.parse(String((char*)payload).substring(0, length));
 
     Lightbar *lightbar = nullptr;
     for (int i = 0; i < this->lightbarCount; i++)

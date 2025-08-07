@@ -54,9 +54,10 @@ bool Remote::registerCommandListener(std::function<void(Remote *, byte, byte)> c
 
 bool Remote::unregisterCommandListener(std::function<void(Remote *, byte, byte)> callback)
 {
+    // ESP8266-compatible function comparison
     for (int i = 0; i < this->numCommandListeners; i++)
     {
-        if (this->commandListeners[i].target<void(Remote *, byte, byte)>() == callback.target<void(Remote *, byte, byte)>())
+        if (&this->commandListeners[i] == &callback)
         {
             for (int j = i; j < this->numCommandListeners - 1; j++)
             {

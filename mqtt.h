@@ -1,5 +1,5 @@
 #include <PubSubClient.h>
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 
 #include "constants.h"
 #include "lightbar.h"
