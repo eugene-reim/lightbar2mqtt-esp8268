@@ -63,7 +63,7 @@ Connect the nRF24 module to the ESP8266 as follows. At least these pins work for
 9. If your Home Assistant has the MQTT integration set up, the light bar should be discovered automatically.
 10. Enjoy controlling your light bar via MQTT!
 
-### 3. Pairing Light bar and ESP32 (optional)
+### 3. Pairing Light bar and ESP8266 (optional)
 
 If you opt to use different values for the serial and remote in the `config.h` file, you need to pair the light bar with the ESP8266. To do this, power-cycle the light bar and within 10 seconds either press the "Pair" button in Home Assistant or send a message to the pair topic (see below). The light bar should blink a few times if the pairing was successful.
 
