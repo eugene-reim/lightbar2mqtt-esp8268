@@ -1,4 +1,6 @@
-# lightbar2mqtt
+# lightbar2mqtt - esp8266 adaptation 
+THIS REPOSITORY IF A FORK, HUGE THANKS TO THE AUTHORS OF THE ORIGINAL PROJECT
+
 
 Control your [Xiaomi Mi Computer Monitor Light Bar](https://www.mi.com/global/product/mi-computer-monitor-light-bar/) with MQTT and add it to Home Assistant! All you need is a ESP8266, a nRF24 module and a light bar of course.
 
