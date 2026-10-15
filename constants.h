@@ -7,7 +7,7 @@
 namespace constants
 {
     // The version number of lightbar2mqtt.
-    const String VERSION = "0.2";
+    const String VERSION = "0.3";
 
     // The maximum number of light bars that can be connected to the controller.
     const uint8_t MAX_LIGHTBARS = 10;

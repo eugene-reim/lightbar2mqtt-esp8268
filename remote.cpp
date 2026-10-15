@@ -54,18 +54,14 @@ bool Remote::registerCommandListener(std::function<void(Remote *, byte, byte)> c
 
 bool Remote::unregisterCommandListener(std::function<void(Remote *, byte, byte)> callback)
 {
-    // ESP8266-compatible function comparison
-    for (int i = 0; i < this->numCommandListeners; i++)
+    // ESP8266: no RTTI, std::function::target<>() is unavailable. MQTT registers a single listener.
+    (void)callback;
+    if (this->numCommandListeners == 0)
+        return false;
+    for (int j = 0; j < this->numCommandListeners - 1; j++)
     {
-        if (&this->commandListeners[i] == &callback)
-        {
-            for (int j = i; j < this->numCommandListeners - 1; j++)
-            {
-                this->commandListeners[j] = this->commandListeners[j + 1];
-            }
-            this->numCommandListeners--;
-            return true;
-        }
+        this->commandListeners[j] = this->commandListeners[j + 1];
     }
-    return false;
+    this->numCommandListeners--;
+    return true;
 }

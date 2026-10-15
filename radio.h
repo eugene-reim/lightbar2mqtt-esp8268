@@ -12,6 +12,7 @@ class Remote;
 struct PackageIdForSerial
 {
     uint32_t serial;
+    boolean never_read = true;
     uint8_t package_id;
 };
 
@@ -35,7 +36,8 @@ private:
     Remote *remotes[constants::MAX_REMOTES];
     uint8_t num_remotes = 0;
 
-    static const uint64_t address = 0xAAAAAAAAAAAA;
+    static const uint64_t send_address = 0x5555555555;
+    static const uint64_t receive_address = 0xAAAAAAAAAA;
     static constexpr byte preamble[8] = {0x53, 0x39, 0x14, 0xDD, 0x1C, 0x49, 0x34, 0x12};
 
     // For details on how these parameters were chosen, see

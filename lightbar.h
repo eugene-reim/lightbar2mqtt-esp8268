@@ -35,10 +35,12 @@ public:
     void setTemperature(uint8_t value);
     void setMiredTemperature(uint mireds);
     void setBrightness(uint8_t value);
+    void toggleInternalState();
+    bool getOnState();
 
 private:
     Radio *radio;
-    bool onState = false;
+    bool onState = true;
     uint32_t serial;
     String serialString;
     const char *name;

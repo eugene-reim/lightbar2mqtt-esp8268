@@ -26,6 +26,7 @@ public:
     void sendAction(Remote *remote, byte command, byte options);
     const String getCombinedRootTopic();
     const String getClientId();
+    void publishLightbarState(Lightbar *lightbar);
 
 private:
     WiFiClient *wifiClient;

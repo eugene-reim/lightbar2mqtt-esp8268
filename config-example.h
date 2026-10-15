@@ -1,11 +1,22 @@
 #include "constants.h"
 
 /* -- nRF24 --------------------------------------------------------------------------------------------------- */
+// GPIO numbers. NodeMCU labels in comments (D2, D1, D7, D6, D5).
 // The pin number to which the nRF24's Chip Enable (CE) pin is connected.
-#define RADIO_PIN_CE 4
+#define RADIO_PIN_CE 4 // D2
 
 // The pin number to which the nRF24's Chip Select Null (CSN) pin is connected.
-#define RADIO_PIN_CSN 5
+#define RADIO_PIN_CSN 5 // D1
+
+// Hardware SPI on ESP8266 is fixed. These defines document the wiring; SPI.begin() uses them implicitly.
+// The pin number to which the nRF24's Master Out Slave In (MOSI) pin is connected.
+#define RADIO_PIN_MOSI 13 // D7
+
+// The pin number to which the nRF24's Master In Slave Out (MISO) pin is connected.
+#define RADIO_PIN_MISO 12 // D6
+
+// The pin number to which the nRF24's Serial Clock (SCK) pin is connected.
+#define RADIO_PIN_SCK 14 // D5
 
 /* -- Light Bars ---------------------------------------------------------------------------------------------- */
 // All light bars that should be controlled by this controller. Each light bar must have a unique serial.
@@ -73,3 +84,17 @@ constexpr SerialWithName REMOTES[] = {
 // later on. But if you want to have a specific name from the beginning or make it easier to identify the device,
 // you can set it here.
 #define HOME_ASSISTANT_DEVICE_NAME "Mi Computer Monitor Light Bar"
+
+/* -- Time ---------------------------------------------------------------------------------------------------- */
+// Syncs the system time with an NTP server. This helps some routers display the ESP8266 in the clients list,
+// such as TP-Link Deco.
+
+// This is the NTP server
+#define NTP_SERVER "pool.ntp.org"
+
+// Your local timezone offset in seconds.
+// eg UTC+10 - 10 * 60 * 60
+#define GMT_OFFSET_SEC 0
+
+// The Daylight offset (in seconds). Set it to 3600 if your country observes Daylight saving time; otherwise, set it to 0.
+#define DST_OFFSET_SEC 0
