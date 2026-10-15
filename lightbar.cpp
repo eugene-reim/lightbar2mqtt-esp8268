@@ -13,6 +13,16 @@ Lightbar::~Lightbar()
 {
 }
 
+void Lightbar::toggleInternalState()
+{
+    onState = !onState;
+}
+
+bool Lightbar::getOnState()
+{
+    return onState;
+}
+
 uint32_t Lightbar::getSerial()
 {
     return this->serial;
@@ -40,8 +50,8 @@ void Lightbar::sendRawCommand(Command command)
 
 void Lightbar::onOff()
 {
-    this->sendRawCommand(Lightbar::Command::ON_OFF);
     onState = !onState;
+    this->sendRawCommand(Lightbar::Command::ON_OFF);
 }
 
 void Lightbar::setOnOff(bool on)
